@@ -2,20 +2,26 @@
 #include <stdio.h>
 #include <string.h>
 #include <iostream>
+#include <fstream> // For file I/O (reading/writing to COM port)
+#include <sstream>
+#include <vector>
 
 // Linux headers
 #include <fcntl.h> // Contains file controls like O_RDWR
 #include <errno.h> // Error integer and strerror() function
-#include <termios.h> // Contains POSIX terminal control definitions
+//#include <termios.h> // Contains POSIX terminal control definitions
 #include <unistd.h> // write(), read(), close()
+
+#include <sys/ioctl.h>// Used for TCGETS2/TCSETS2, which is required for custom baud rates
+#include <asm/termbits.h>
 
 //struct termios tty;
 
-int main() {
+int main(int argc, char **argv) {
 	// Create serial port object and open serial port
-	std::string device = "/dev/ttyUSB1";
+	const std::string device = "/dev/ttyUSB1";
 	int serial_port = open(device.c_str(), O_RDWR);
-
+	printf("%d \n",serial_port);
 	// Check for errors
 	if (serial_port < 0) {
 	    printf("Error %i from open: %s\n", errno, strerror(errno));
@@ -23,9 +29,11 @@ int main() {
 	// Create new termios struct, we call it 'tty' for convention
 	// No need for "= {0}" at the end as we'll immediately write the existing
 	// config to this struct
-	struct termios tty;
-
-
+	struct termios2 tty;
+	ioctl(serial_port, TCGETS2, &tty);
+	//if(tcgetattr(serial_port, &tty) != 0) {
+	//	printf("Error %i from tcgetattr: %s\n", errno, strerror(errno));
+	//}
 	tty.c_cflag &= ~PARENB; // Clear parity bit, disabling parity (most common)
 	//tty.c_cflag |= PARENB;  // Set parity bit, enabling parity
 
@@ -43,9 +51,12 @@ int main() {
 	
 	tty.c_cflag |= CREAD | CLOCAL; // Turn on READ & ignore ctrl lines (CLOCAL = 1)
 
+	// Set custom baud rate
+	tty.c_cflag &= ~CBAUD;
+	tty.c_cflag |= CBAUDEX;
 	// Set in/out baud rate to be 9600
-	cfsetispeed(&tty, B9600);
-	cfsetospeed(&tty, B9600);
+	tty.c_ispeed = 9600;
+	tty.c_ospeed = 9600;
 	
 	tty.c_oflag = 0;
 	tty.c_oflag &= ~OPOST; // Prevent special interpretation of output bytes (e.g. newline chars)
@@ -68,19 +79,21 @@ int main() {
 	// read() returns is instead controlled by c_cc[VMIN] and c_cc[VTIME]
 	tty.c_lflag		&= ~ICANON;		
 	// Configure echo depending on echo_ boolean
+	//tty.c_lflag |= ECHO;
 	tty.c_lflag 	&= ~(ECHO);
 	tty.c_lflag		&= ~ECHOE;								// Turn off echo erase (echo erase only relevant if canonical input is active)
 	tty.c_lflag		&= ~ECHONL;								//
 	tty.c_lflag		&= ~ISIG;								// Disables recognition of INTR (interrupt), QUIT and SUSP (suspend) characters
-	// Flush port, then apply attributes
-	tcflush(serial_port, TCIFLUSH);
-	if(tcsetattr(serial_port, TCSANOW, &tty) != 0)
-	{
-	 	// Error occurred
-	 	std::cout << "Could not apply terminal attributes for \"" << device << "\" - " << strerror(errno) << std::endl;
-	 	throw std::system_error(EFAULT, std::system_category());
-
-	}
+	//  apply attributes
+	ioctl(serial_port, TCSETS2, &tty);
+	//tcflush(serial_port, TCIFLUSH);
+	//if(tcsetattr(serial_port, TCSANOW, &tty) != 0)
+	//{
+	// 	// Error occurred
+	// 	std::cout << "Could not apply terminal attributes for \"" << device << "\" - " << strerror(errno) << std::endl;
+	// 	throw std::system_error(EFAULT, std::system_category());
+	//
+	//}
 	// Read in existing settings, and handle any error
 	// NOTE: This is important! POSIX states that the struct passed to tcsetattr()
 	// must have been initialized with a call to tcgetattr() overwise behaviour
@@ -90,10 +103,11 @@ int main() {
 	//}
 
 	//Read/Write
-	std::string msg = "ID";
+	std::string msg = argv[1];//"ID";
 	//unsigned char msg[] = { 'I', 'D','\r'};
 
 	printf("write \n");
+	printf("Send: %s \n",msg.c_str());
 	int writeResult = write(serial_port, msg.c_str(), msg.size());
 	//int writeResult = write(serial_port, msg, sizeof(msg));
 	// Check status
@@ -102,16 +116,18 @@ int main() {
 	}
 
 	// Allocate memory for read buffer, set size according to your needs
-	char read_buf [2048];
-
+	std::vector<char> read_buf;
+	int def_size = 255;
 	printf("read \n");
 	// Read bytes. The behaviour of read() (e.g. does it block?,
 	// how long does it block for?) depends on the configuration
 	// settings above, specifically VMIN and VTIME
-	ssize_t n = read(serial_port, &read_buf[0], 2048);
+	ssize_t n = read(serial_port, &read_buf[0], def_size);
+	std::string data = std::string(&read_buf[0], n);
 	printf("%d \n",n);
-	printf("%s \n",read_buf);
+	printf("%s \n",data.c_str());
 	// n is the number of bytes read. n may be 0 if no bytes were received, and can also be negative to signal an error.
+	printf("close \n");
 	close(serial_port);
 	/*
 	SerialPort serialPort("/dev/ttyUSB1", BaudRate::B_9600);

@@ -16,6 +16,7 @@
 #include <asm/termbits.h>
 
 //struct termios tty;
+//#define    BOTHER 0010000
 
 int main(int argc, char **argv) {
 	// Create serial port object and open serial port
@@ -34,56 +35,47 @@ int main(int argc, char **argv) {
 	//if(tcgetattr(serial_port, &tty) != 0) {
 	//	printf("Error %i from tcgetattr: %s\n", errno, strerror(errno));
 	//}
-	tty.c_cflag &= ~PARENB; // Clear parity bit, disabling parity (most common)
-	//tty.c_cflag |= PARENB;  // Set parity bit, enabling parity
+	//================= (.c_cflag) ===============//
+	//tty.c_cflag &= ~PARENB; // Clear parity bit, disabling parity (most common)
+	tty.c_cflag |= PARENB;  // Set parity bit, enabling parity
+	tty.c_cflag |= PARODD; //Odd parity is used
+	tty.c_cflag     &=  ~CSTOPB;		// Only one stop-bit is used
+	tty.c_cflag     &=  ~CSIZE;			// CSIZE is a mask for the number of bits per character
+	tty.c_cflag     |=  CS8;			// Set to 8 bits per character
+	tty.c_cflag     &=  ~CRTSCTS;       // Disable hadrware flow control (RTS/CTS)
+	tty.c_cflag     |=  CREAD | CLOCAL;     				// Turn on READ & ignore ctrl lines (CLOCAL = 1)
 
-	tty.c_cflag &= ~CSTOPB; // Clear stop field, only one stop bit used in communication (most common)
-	//tty.c_cflag |= CSTOPB;  // Set stop field, two stop bits used in communication
 
-	tty.c_cflag &= ~CSIZE; // Clear all the size bits, then use one of the statements below
-	//tty.c_cflag |= CS5; // 5 bits per byte
-	//tty.c_cflag |= CS6; // 6 bits per byte
-	//tty.c_cflag |= CS7; // 7 bits per byte
-	tty.c_cflag |= CS8; // 8 bits per byte (most common)
-
-	tty.c_cflag &= ~CRTSCTS; // Disable RTS/CTS hardware flow control (most common)
-	//tty.c_cflag |= CRTSCTS;  // Enable RTS/CTS hardware flow control
-	
-	tty.c_cflag |= CREAD | CLOCAL; // Turn on READ & ignore ctrl lines (CLOCAL = 1)
-
-	// Set custom baud rate
+    //===================== BAUD RATE =================//
 	tty.c_cflag &= ~CBAUD;
 	tty.c_cflag |= CBAUDEX;
-	// Set in/out baud rate to be 9600
+
 	tty.c_ispeed = 9600;
 	tty.c_ospeed = 9600;
-	
-	tty.c_oflag = 0;
-	tty.c_oflag &= ~OPOST; // Prevent special interpretation of output bytes (e.g. newline chars)
-	//tty.c_oflag &= ~ONLCR; // Prevent conversion of newline to carriage return/line feed
-	// tty.c_oflag &= ~OXTABS; // Prevent conversion of tabs to spaces (NOT PRESENT IN LINUX)
-	// tty.c_oflag &= ~ONOEOT; // Prevent removal of C-d chars (0x004) in output (NOT PRESENT IN LINUX)
-	
-	// Setting both to 0 will give a non-blocking read
-	tty.c_cc[VTIME] = 0;//10;    // Wait for up to 1s (10 deciseconds), returning as soon as any data is received.
-	tty.c_cc[VMIN] = 0;
+		
+	//===================== (.c_oflag) =================//
 
+	tty.c_oflag     =   0;              // No remapping, no delays
+	tty.c_oflag     &=  ~OPOST;			// Make raw
+
+	//================= CONTROL CHARACTERS (.c_cc[]) ==================//
+
+    tty.c_cc[VTIME] = 0;
+    tty.c_cc[VMIN] = 0;
 
 	//======================== (.c_iflag) ====================//
 
 	tty.c_iflag     &= ~(IXON | IXOFF | IXANY);			// Turn off s/w flow ctrl
 	tty.c_iflag 	&= ~(IGNBRK|BRKINT|PARMRK|ISTRIP|INLCR|IGNCR|ICRNL);
-	//=========================== LOCAL MODES (c_lflag) =======================//
 
-	// Canonical input is when read waits for EOL or EOF characters before returning. In non-canonical mode, the rate at which
-	// read() returns is instead controlled by c_cc[VMIN] and c_cc[VTIME]
-	tty.c_lflag		&= ~ICANON;		
-	// Configure echo depending on echo_ boolean
-	//tty.c_lflag |= ECHO;
-	tty.c_lflag 	&= ~(ECHO);
+
+	//=========================== LOCAL MODES (c_lflag) =======================//
+	tty.c_lflag |= ECHO;
+	//tty.c_lflag &= ~(ECHO);
 	tty.c_lflag		&= ~ECHOE;								// Turn off echo erase (echo erase only relevant if canonical input is active)
 	tty.c_lflag		&= ~ECHONL;								//
 	tty.c_lflag		&= ~ISIG;								// Disables recognition of INTR (interrupt), QUIT and SUSP (suspend) characters
+
 	//  apply attributes
 	ioctl(serial_port, TCSETS2, &tty);
 	//tcflush(serial_port, TCIFLUSH);
@@ -103,29 +95,44 @@ int main(int argc, char **argv) {
 	//}
 
 	//Read/Write
-	std::string msg = argv[1];//"ID";
+	//std::string msg = argv[1];//"ID";
+	std::string msg = "ID";
 	//unsigned char msg[] = { 'I', 'D','\r'};
 
 	printf("write \n");
 	printf("Send: %s \n",msg.c_str());
 	int writeResult = write(serial_port, msg.c_str(), msg.size());
+	if (writeResult < 0) {
+	    printf("Error %i from open: %s\n", errno, strerror(errno));
+	}
 	//int writeResult = write(serial_port, msg, sizeof(msg));
 	// Check status
-	if (writeResult == -1) {
-		throw std::system_error(EFAULT, std::system_category());
-	}
-
+	//if (writeResult == -1) {
+	//	throw std::system_error(EFAULT, std::system_category());
+	//}
+	usleep ((7 + 25) * 100); 
 	// Allocate memory for read buffer, set size according to your needs
 	std::vector<char> read_buf;
-	int def_size = 255;
+	int def_size = 1024;
 	printf("read \n");
 	// Read bytes. The behaviour of read() (e.g. does it block?,
 	// how long does it block for?) depends on the configuration
 	// settings above, specifically VMIN and VTIME
+	printf("%d",serial_port);
 	ssize_t n = read(serial_port, &read_buf[0], def_size);
-	std::string data = std::string(&read_buf[0], n);
+	// Error Handling
+	//if(n < 0) {
+	//	// Read was unsuccessful
+	//	throw std::system_error(EFAULT, std::system_category());
+	//}
+	// Check for errors
+	if (n < 0) {
+	    printf("Error %i from open: %s\n", errno, strerror(errno));
+	}
+	printf("convert to string \n");
+	//std::string data = std::string(&read_buf[0], n);
 	printf("%d \n",n);
-	printf("%s \n",data.c_str());
+	//printf("%s \n",data.c_str());
 	// n is the number of bytes read. n may be 0 if no bytes were received, and can also be negative to signal an error.
 	printf("close \n");
 	close(serial_port);

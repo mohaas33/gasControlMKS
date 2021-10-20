@@ -24,6 +24,23 @@ Read the set-point of the 6-th flow controller:
 - Disable the flow controller: 
 `OF 6`
 
-### **Monitoring**
+### **Logger**
 
+Logs to file for T secconds with every dT interval.
+
+To make 10 logs every second: 
+
+`./MKSLogger.py out.log 10 1`
+
+
+### **Monitoring**
+There is flow monitoring SW:
 `./gasMonitor.py`
+
+- Read flow set: 
+`FL 6`
+- Read pressure:
+`PU R`
+
+### **Manual**
+In the Documents directory: 647Cman.pdf

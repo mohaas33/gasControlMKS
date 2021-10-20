@@ -22,7 +22,7 @@ def _readline(ser):
 def readMKS(inputLine = 'ID'):
     # configure the serial connections (the parameters differs on the device you are connecting to)
     ser = serial.Serial(
-        port='/dev/ttyUSB0',
+        port='/dev/ttyUSB1',
         baudrate=9600,
         parity=serial.PARITY_ODD,
         bytesize=serial.EIGHTBITS
